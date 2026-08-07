@@ -11,7 +11,12 @@ app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 const dbRoutes = require("./routes/db");
+const playersRoutes = require("./routes/players");
+const matchesRoutes = require("./routes/matches");
+
 app.use("/api/db", dbRoutes);
+app.use("/api/players", playersRoutes);
+app.use("/api/matches", matchesRoutes);
 
 app.use(express.static(path.join(__dirname, "public")));
 

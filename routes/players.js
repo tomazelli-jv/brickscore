@@ -4,12 +4,14 @@ const db = require("../database");
 
 // Listar jogadores
 router.get("/", async (req, res) => {
+
     try {
 
         const [rows] = await db.query(`
             SELECT
                 id,
-                name
+                name,
+                created_at
             FROM players
             ORDER BY name
         `);
@@ -25,23 +27,33 @@ router.get("/", async (req, res) => {
         });
 
     }
+
 });
 
-// Criar jogador
+// Cadastrar jogador
 router.post("/", async (req, res) => {
 
     try {
 
-        const { name } = req.body;
+        const { id, name, createdAt } = req.body;
 
-        const [result] = await db.query(
-            "INSERT INTO players(name) VALUES(?)",
-            [name]
-        );
+        await db.query(`
+            INSERT INTO players
+            (
+                id,
+                name,
+                created_at
+            )
+            VALUES
+            (?, ?, ?)
+        `, [
+            id,
+            name,
+            createdAt
+        ]);
 
         res.json({
-            id: result.insertId,
-            name
+            success: true
         });
 
     } catch (err) {
@@ -56,18 +68,20 @@ router.post("/", async (req, res) => {
 
 });
 
-// Atualizar jogador
+// Alterar jogador
 router.put("/:id", async (req, res) => {
 
     try {
 
-        const { id } = req.params;
-        const { name } = req.body;
-
-        await db.query(
-            "UPDATE players SET name=? WHERE id=?",
-            [name, id]
-        );
+        await db.query(`
+            UPDATE players
+            SET
+                name = ?
+            WHERE id = ?
+        `, [
+            req.body.name,
+            req.params.id
+        ]);
 
         res.json({
             success: true
@@ -90,12 +104,12 @@ router.delete("/:id", async (req, res) => {
 
     try {
 
-        const { id } = req.params;
-
-        await db.query(
-            "DELETE FROM players WHERE id=?",
-            [id]
-        );
+        await db.query(`
+            DELETE FROM players
+            WHERE id = ?
+        `, [
+            req.params.id
+        ]);
 
         res.json({
             success: true

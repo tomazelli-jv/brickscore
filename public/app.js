@@ -71,20 +71,27 @@ const DB = (() => {
 
     }
 
-   function save() {
+   async function save() {
+    try {
+        const response = await fetch("/api/db", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(state)
+        });
 
-    fetch("/api/db", {
+        if (!response.ok) {
+            const erro = await response.text();
+            throw new Error(erro);
+        }
 
-        method: "POST",
-
-        headers: {
-            "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify(state)
-
-    }).catch(console.error);
-
+        return true;
+    } catch (err) {
+        console.error(err);
+        Toast.show("Erro ao salvar dados.");
+        return false;
+    }
 }
 
     return {
@@ -103,7 +110,7 @@ const DB = (() => {
 
         async save() {
 
-            await save();
+            await DB.save();
 
         },
 
@@ -206,74 +213,207 @@ const Toast = {
    MODULE: Players (CRUD)
    ============================================================= */
 const Players = {
+
+  list: [],
+
+  async load() {
+
+    const response = await fetch("/api/players");
+    this.list = await response.json();
+
+  },
+
   all() {
-    return DB.data.players;
+
+    return this.list;
+
   },
+
   byId(id) {
-    return DB.data.players.find((p) => p.id === id);
+
+    return this.list.find(p => p.id === id);
+
   },
-  add(name) {
-    const player = { id: Utils.uid(), name: name.trim(), createdAt: Utils.nowISO() };
-    DB.data.players.push(player);
-    DB.save();
+
+  async add(name) {
+
+    const player = {
+      id: Utils.uid(),
+      name: name.trim(),
+      createdAt: Utils.nowISO()
+    };
+
+    await fetch("/api/players", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(player)
+    });
+
+    await this.load();
+
     return player;
+
   },
-  rename(id, name) {
-    const p = Players.byId(id);
-    if (p) { p.name = name.trim(); DB.save(); }
+
+  async rename(id, name) {
+
+    await fetch("/api/players/" + id, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name
+      })
+    });
+
+    await this.load();
+
   },
-  remove(id) {
-    DB.data.players = DB.data.players.filter((p) => p.id !== id);
-    DB.save();
+
+  async remove(id) {
+
+    await fetch("/api/players/" + id, {
+      method: "DELETE"
+    });
+
+    await this.load();
+
   },
+
   search(term) {
+
     const t = term.trim().toLowerCase();
-    if (!t) return Players.all();
-    return Players.all().filter((p) => p.name.toLowerCase().includes(t));
-  },
+
+    if (!t)
+      return this.list;
+
+    return this.list.filter(p =>
+      p.name.toLowerCase().includes(t)
+    );
+
+  }
+
 };
 
 /* =============================================================
    MODULE: Matches (CRUD)
    ============================================================= */
 const Matches = {
+
+  list: [],
+
+  async load() {
+
+    const response = await fetch("/api/matches");
+    this.list = await response.json();
+
+  },
+
   all() {
-    return DB.data.matches.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    return this.list.slice().sort(
+      (a, b) => new Date(b.date) - new Date(a.date)
+    );
+
   },
+
   byId(id) {
-    return DB.data.matches.find((m) => m.id === id);
+
+    return this.list.find(m => m.id === id);
+
   },
+
   bySeason(year) {
-    return Matches.all().filter((m) => Utils.yearOf(m.date) === year);
+
+    return this.all().filter(m => m.season === year);
+
   },
-  add(match) {
+
+  async add(match) {
+
     match.id = Utils.uid();
-    DB.data.matches.push(match);
-    if (!DB.data.seasons.includes(match.season)) DB.data.seasons.push(match.season);
-    DB.save();
+
+    await fetch("/api/matches", {
+
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify(match)
+
+    });
+
+    await this.load();
+
     return match;
+
   },
-  update(id, patch) {
-    const m = Matches.byId(id);
-    if (m) { Object.assign(m, patch); DB.save(); }
+
+  async update(id, patch) {
+
+    await fetch("/api/matches/" + id, {
+
+      method: "PUT",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify(patch)
+
+    });
+
+    await this.load();
+
   },
-  remove(id) {
-    DB.data.matches = DB.data.matches.filter((m) => m.id !== id);
-    DB.save();
+
+  async remove(id) {
+
+    await fetch("/api/matches/" + id, {
+
+      method: "DELETE"
+
+    });
+
+    await this.load();
+
   },
-  duplicate(id) {
-    const m = Matches.byId(id);
-    if (!m) return null;
+
+  async duplicate(id) {
+
+    const m = this.byId(id);
+
+    if (!m)
+      return null;
+
     const copy = JSON.parse(JSON.stringify(m));
+
     delete copy.id;
+
     copy.date = Utils.nowISO();
+
     copy.season = Utils.yearOf(copy.date);
-    return Matches.add(copy);
+
+    return await this.add(copy);
+
   },
+
   playerMatches(playerId, matchesPool) {
-    const pool = matchesPool || Matches.all();
-    return pool.filter((m) => m.teamAIds.includes(playerId) || m.teamBIds.includes(playerId));
-  },
+
+    const pool = matchesPool || this.all();
+
+    return pool.filter(m =>
+      m.teamAIds.includes(playerId) ||
+      m.teamBIds.includes(playerId)
+    );
+
+  }
+
 };
 
 /* =============================================================
@@ -1262,8 +1402,10 @@ const DataTransfer = {
    INIT / EVENTOS GLOBAIS
    ============================================================= */
 async function initApp() {
+ 
   await DB.load();
-  
+  await Players.load(); 
+ 
   document.querySelectorAll('[data-nav]').forEach((el) => {
     el.addEventListener('click', () => Router.go(el.dataset.nav));
   });
