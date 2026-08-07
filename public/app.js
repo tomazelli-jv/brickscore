@@ -305,12 +305,29 @@ const Matches = {
 
   list: [],
 
-  async load() {
+async load() {
 
     const response = await fetch("/api/matches");
+
     this.list = await response.json();
 
-  },
+    this.list.forEach(m => {
+
+        if (typeof m.teamAIds === "string")
+            m.teamAIds = JSON.parse(m.teamAIds);
+
+        if (typeof m.teamBIds === "string")
+            m.teamBIds = JSON.parse(m.teamBIds);
+
+        if (typeof m.stats === "string")
+            m.stats = JSON.parse(m.stats);
+
+        if (typeof m.mvpTie === "string")
+            m.mvpTie = JSON.parse(m.mvpTie);
+
+    });
+
+},
 
   all() {
 
@@ -1412,10 +1429,14 @@ const DataTransfer = {
 /* =============================================================
    INIT / EVENTOS GLOBAIS
    ============================================================= */
+
 async function initApp() {
- 
+
   await DB.load();
-  await Players.load(); 
+
+  await Players.load();
+
+  await Matches.load();
  
   document.querySelectorAll('[data-nav]').forEach((el) => {
     el.addEventListener('click', () => Router.go(el.dataset.nav));

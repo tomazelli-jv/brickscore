@@ -32,14 +32,14 @@ router.get("/", async (req, res) => {
 
 }
 
-//rows.forEach(row => {
+rows.forEach(row => {
 
-    //row.teamAIds = parseJson(row.teamAIds);
-    //row.teamBIds = parseJson(row.teamBIds);
-    //row.stats    = parseJson(row.stats);
-  //  row.mvpTie   = parseJson(row.mvpTie);
+  row.teamAIds = parseJson(row.teamAIds);
+  row.teamBIds = parseJson(row.teamBIds);
+  row.stats    = parseJson(row.stats);
+  row.mvpTie   = parseJson(row.mvpTie);
 
-//  }); 
+}); 
 
         res.json(rows);
 
