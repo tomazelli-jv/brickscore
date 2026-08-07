@@ -759,22 +759,33 @@ const MatchWizard = {
     document.getElementById('mw-save').onclick = () => { recalc(); this.save(); };
   },
 
-  computeMvp() {
+ computeMvp() {
     const s = this.state;
     const all = [...s.teamAIds, ...s.teamBIds];
     let best = [];
     let bestKey = null;
+
     all.forEach((id) => {
       const st = s.statsMap[id] || { points: 0, assists: 0, threePoints: 0 };
-      const key = [st.points, st.assists, st.threePoints];
+      const history = Stats.forPlayer(id);
+      const games = history.games || 0;
+      const participationFactor = games >= 3 ? 1 : 0.55;
+      const key = [
+        st.points * participationFactor,
+        st.assists * participationFactor,
+        st.threePoints * participationFactor,
+      ];
+
       if (!bestKey || key[0] > bestKey[0] ||
           (key[0] === bestKey[0] && key[1] > bestKey[1]) ||
           (key[0] === bestKey[0] && key[1] === bestKey[1] && key[2] > bestKey[2])) {
-        bestKey = key; best = [id];
+        bestKey = key;
+        best = [id];
       } else if (key[0] === bestKey[0] && key[1] === bestKey[1] && key[2] === bestKey[2]) {
         best.push(id);
       }
     });
+
     return best.length === 1 ? { mvpId: best[0], tie: null } : { mvpId: null, tie: best };
   },
 
