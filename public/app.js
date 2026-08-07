@@ -243,13 +243,16 @@ const Players = {
       createdAt: Utils.nowISO()
     };
 
-    await fetch("/api/players", {
+    const response = await fetch("/api/players", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify(player)
     });
+
+    if (!response.ok)
+      throw new Error(await response.text() || "Erro ao cadastrar jogador");
 
     await this.load();
 
@@ -259,7 +262,7 @@ const Players = {
 
   async rename(id, name) {
 
-    await fetch("/api/players/" + id, {
+    const response = await fetch("/api/players/" + id, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -268,6 +271,9 @@ const Players = {
         name
       })
     });
+
+    if (!response.ok)
+      throw new Error(await response.text() || "Erro ao editar jogador");
 
     await this.load();
 
@@ -353,7 +359,7 @@ async load() {
 
     match.id = Utils.uid();
 
-    await fetch("/api/matches", {
+    const response = await fetch("/api/matches", {
 
       method: "POST",
 
@@ -365,6 +371,9 @@ async load() {
 
     });
 
+    if (!response.ok)
+      throw new Error(await response.text() || "Erro ao salvar partida");
+
     await this.load();
 
     return match;
@@ -373,7 +382,7 @@ async load() {
 
   async update(id, patch) {
 
-    await fetch("/api/matches/" + id, {
+    const response = await fetch("/api/matches/" + id, {
 
       method: "PUT",
 
@@ -384,6 +393,9 @@ async load() {
       body: JSON.stringify(patch)
 
     });
+
+    if (!response.ok)
+      throw new Error(await response.text() || "Erro ao editar partida");
 
     await this.load();
 
@@ -628,14 +640,24 @@ const PlayerForm = {
     const input = document.getElementById('pf-name');
     setTimeout(() => input.focus(), 50);
 
-    document.getElementById('pf-save').onclick = () => {
+    document.getElementById('pf-save').onclick = async () => {
       const name = input.value.trim();
       if (!name) { Toast.show('Digite um nome'); return; }
-      if (editing) Players.rename(editing.id, name);
-      else Players.add(name);
-      Modal.close();
-      Router.render();
-      Toast.show('Jogador salvo');
+      const saveBtn = document.getElementById('pf-save');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Salvando...';
+      try {
+        if (editing) await Players.rename(editing.id, name);
+        else await Players.add(name);
+        Modal.close();
+        Router.render();
+        Toast.show('Jogador salvo');
+      } catch (err) {
+        console.error(err);
+        Toast.show('Não foi possível salvar o jogador');
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Salvar';
+      }
     };
 
     const delBtn = document.getElementById('pf-delete');
@@ -757,6 +779,13 @@ const MatchWizard = {
           <span class="link">${s.selected.size} / ${needed}</span>
         </div>
         <div class="field"><input type="text" id="mw-search" placeholder="Buscar jogador..." value="${Utils.escapeHtml(s.search)}"></div>
+        <div class="field-row" style="align-items:flex-end;margin-bottom:12px;">
+          <div class="field" style="flex:1;margin:0;">
+            <label for="mw-new-player">Novo jogador</label>
+            <input type="text" id="mw-new-player" placeholder="Nome do jogador" maxlength="40">
+          </div>
+          <button class="btn-secondary" id="mw-add-player" ${s.selected.size >= needed ? 'disabled style="opacity:.4;"' : ''}>+ Cadastrar</button>
+        </div>
         <div class="player-pick-list" id="mw-pick-list">
           ${list.length ? list.map((p) => `
             <div class="player-pick-row ${s.selected.has(p.id) ? 'selected' : ''}" data-id="${p.id}">
@@ -767,6 +796,30 @@ const MatchWizard = {
         </div>`;
 
       document.getElementById('mw-search').oninput = (e) => { s.search = e.target.value; this.renderStep(); document.getElementById('mw-search').focus(); };
+      const newPlayerInput = document.getElementById('mw-new-player');
+      const addPlayerBtn = document.getElementById('mw-add-player');
+      addPlayerBtn.onclick = async () => {
+        const name = newPlayerInput.value.trim();
+        if (!name) { Toast.show('Digite o nome do jogador'); newPlayerInput.focus(); return; }
+        if (s.selected.size >= needed) { Toast.show(`A partida já tem ${needed} jogadores selecionados`); return; }
+        addPlayerBtn.disabled = true;
+        addPlayerBtn.textContent = 'Cadastrando...';
+        try {
+          const player = await Players.add(name);
+          s.selected.add(player.id);
+          s.search = '';
+          this.renderStep();
+          Toast.show('Jogador cadastrado e selecionado');
+        } catch (err) {
+          console.error(err);
+          Toast.show('Não foi possível cadastrar o jogador');
+          addPlayerBtn.disabled = false;
+          addPlayerBtn.textContent = '+ Cadastrar';
+        }
+      };
+      newPlayerInput.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); addPlayerBtn.click(); }
+      };
       body.querySelectorAll('.player-pick-row').forEach((row) => {
         row.onclick = () => {
           const id = row.dataset.id;
@@ -913,7 +966,20 @@ const MatchWizard = {
       <button class="btn-secondary" id="mw-back">Voltar</button>
       <button class="btn-primary" id="mw-save" style="flex:1;">Salvar partida</button>`;
     document.getElementById('mw-back').onclick = () => { recalc(); s.step = 2; this.renderStep(); };
-    document.getElementById('mw-save').onclick = () => { recalc(); this.save(); };
+    document.getElementById('mw-save').onclick = async () => {
+      recalc();
+      const saveBtn = document.getElementById('mw-save');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Salvando...';
+      try {
+        await this.save();
+      } catch (err) {
+        console.error(err);
+        Toast.show('Não foi possível salvar a partida');
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Salvar partida';
+      }
+    };
   },
 
  computeMvp() {
@@ -946,7 +1012,7 @@ const MatchWizard = {
     return best.length === 1 ? { mvpId: best[0], tie: null } : { mvpId: null, tie: best };
   },
 
-  save() {
+  async save() {
     const s = this.state;
     const scoreA = s.teamAIds.reduce((sum, id) => sum + (s.statsMap[id]?.points || 0), 0);
     const scoreB = s.teamBIds.reduce((sum, id) => sum + (s.statsMap[id]?.points || 0), 0);
@@ -967,8 +1033,8 @@ const MatchWizard = {
       mvpId, mvpTie: tie,
     };
 
-    if (s.editingId) Matches.update(s.editingId, payload);
-    else Matches.add(payload);
+    if (s.editingId) await Matches.update(s.editingId, payload);
+    else await Matches.add(payload);
 
     Modal.close();
     Toast.show(tie ? 'Partida salva — empate de MVP' : 'Partida salva!');
