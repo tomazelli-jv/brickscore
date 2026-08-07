@@ -13,16 +13,33 @@ router.get("/", async (req, res) => {
             ORDER BY date DESC
         `);
 
-        rows.forEach(row => {
+        function parseJson(value) {
 
-            row.teamAIds = JSON.parse(row.teamAIds);
-            row.teamBIds = JSON.parse(row.teamBIds);
-            row.stats = JSON.parse(row.stats);
+    if (value === null || value === undefined)
+        return null;
 
-            if (row.mvpTie)
-                row.mvpTie = JSON.parse(row.mvpTie);
+    if (typeof value === "object")
+        return value;
 
-        });
+    if (typeof value !== "string")
+        return value;
+
+    try {
+        return JSON.parse(value);
+    } catch {
+        return value;
+    }
+
+}
+
+rows.forEach(row => {
+
+    row.teamAIds = parseJson(row.teamAIds);
+    row.teamBIds = parseJson(row.teamBIds);
+    row.stats    = parseJson(row.stats);
+    row.mvpTie   = parseJson(row.mvpTie);
+
+});
 
         res.json(rows);
 
