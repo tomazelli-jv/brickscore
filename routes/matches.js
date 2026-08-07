@@ -55,6 +55,8 @@ rows.forEach(row => {
 
 });
 
+
+
 // Nova partida
 router.post("/", async (req, res) => {
 
@@ -62,7 +64,10 @@ router.post("/", async (req, res) => {
 
         const m = req.body;
 
-        await db.query(`
+        console.log("BODY:");// TESTE 07-08-2026
+        console.log(JSON.stringify(m, null, 2));// TESTE 07-08-2026
+
+        const [result] = await db.query(`
             INSERT INTO matches
             (
                 id,
@@ -80,8 +85,7 @@ router.post("/", async (req, res) => {
                 mvpId,
                 mvpTie
             )
-            VALUES
-            (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
 
             m.id,
@@ -100,6 +104,9 @@ router.post("/", async (req, res) => {
             JSON.stringify(m.mvpTie)
 
         ]);
+
+        console.log("RESULT:");// TESTE 07-08-2026
+        console.log(result);// TESTE 07-08-2026
 
         res.json({
             success: true
