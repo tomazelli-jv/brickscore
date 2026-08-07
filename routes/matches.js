@@ -32,14 +32,14 @@ router.get("/", async (req, res) => {
 
 }
 
-rows.forEach(row => {
+//rows.forEach(row => {
 
-    row.teamAIds = parseJson(row.teamAIds);
-    row.teamBIds = parseJson(row.teamBIds);
-    row.stats    = parseJson(row.stats);
-    row.mvpTie   = parseJson(row.mvpTie);
+    //row.teamAIds = parseJson(row.teamAIds);
+    //row.teamBIds = parseJson(row.teamBIds);
+    //row.stats    = parseJson(row.stats);
+  //  row.mvpTie   = parseJson(row.mvpTie);
 
-});
+//  }); 
 
         res.json(rows);
 
@@ -63,9 +63,6 @@ router.post("/", async (req, res) => {
     try {
 
         const m = req.body;
-
-        console.log("BODY:");// TESTE 07-08-2026
-        console.log(JSON.stringify(m, null, 2));// TESTE 07-08-2026
 
         const [result] = await db.query(`
             INSERT INTO matches
@@ -104,9 +101,6 @@ router.post("/", async (req, res) => {
             JSON.stringify(m.mvpTie)
 
         ]);
-
-        console.log("RESULT:");// TESTE 07-08-2026
-        console.log(result);// TESTE 07-08-2026
 
         res.json({
             success: true
