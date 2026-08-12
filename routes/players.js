@@ -36,6 +36,9 @@ router.post("/", async (req, res) => {
     try {
 
         const { id, name, createdAt } = req.body;
+        const cleanName = typeof name === "string" ? name.trim() : "";
+        if (!id || !cleanName)
+            return res.status(400).json({ error: "Id e nome do jogador são obrigatórios." });
 
         await db.query(`
             INSERT INTO players
@@ -48,8 +51,8 @@ router.post("/", async (req, res) => {
             (?, ?, ?)
         `, [
             id,
-            name,
-            createdAt
+            cleanName,
+            createdAt ? new Date(createdAt) : new Date()
         ]);
 
         res.json({
@@ -73,15 +76,22 @@ router.put("/:id", async (req, res) => {
 
     try {
 
-        await db.query(`
+        const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+        if (!name)
+            return res.status(400).json({ error: "Nome do jogador é obrigatório." });
+
+        const [result] = await db.query(`
             UPDATE players
             SET
                 name = ?
             WHERE id = ?
         `, [
-            req.body.name,
+            name,
             req.params.id
         ]);
+
+        if (!result.affectedRows)
+            return res.status(404).json({ error: "Jogador não encontrado." });
 
         res.json({
             success: true
@@ -104,12 +114,15 @@ router.delete("/:id", async (req, res) => {
 
     try {
 
-        await db.query(`
+        const [result] = await db.query(`
             DELETE FROM players
             WHERE id = ?
         `, [
             req.params.id
         ]);
+
+        if (!result.affectedRows)
+            return res.status(404).json({ error: "Jogador não encontrado." });
 
         res.json({
             success: true

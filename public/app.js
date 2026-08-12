@@ -110,7 +110,7 @@ const DB = (() => {
 
         async save() {
 
-            await DB.save();
+            return await save();
 
         },
 
@@ -217,9 +217,11 @@ const Players = {
   list: [],
 
   async load() {
-
     const response = await fetch("/api/players");
-    this.list = await response.json();
+    if (!response.ok) throw new Error(`Erro ao carregar jogadores (${response.status})`);
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error('Resposta inválida de jogadores');
+    this.list = data;
 
   },
 
@@ -243,13 +245,15 @@ const Players = {
       createdAt: Utils.nowISO()
     };
 
-    await fetch("/api/players", {
+    const response = await fetch("/api/players", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify(player)
     });
+
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Erro ao cadastrar jogador');
 
     await this.load();
 
@@ -259,7 +263,7 @@ const Players = {
 
   async rename(id, name) {
 
-    await fetch("/api/players/" + id, {
+    const response = await fetch("/api/players/" + encodeURIComponent(id), {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -269,15 +273,19 @@ const Players = {
       })
     });
 
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Erro ao alterar jogador');
+
     await this.load();
 
   },
 
   async remove(id) {
 
-    await fetch("/api/players/" + id, {
+    const response = await fetch("/api/players/" + encodeURIComponent(id), {
       method: "DELETE"
     });
+
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Erro ao excluir jogador');
 
     await this.load();
 
@@ -308,8 +316,10 @@ const Matches = {
 async load() {
 
     const response = await fetch("/api/matches");
-
-    this.list = await response.json();
+    if (!response.ok) throw new Error(`Erro ao carregar partidas (${response.status})`);
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error('Resposta inválida de partidas');
+    this.list = data;
 
     this.list.forEach(m => {
 
@@ -353,7 +363,7 @@ async load() {
 
     match.id = Utils.uid();
 
-    await fetch("/api/matches", {
+    const response = await fetch("/api/matches", {
 
       method: "POST",
 
@@ -365,6 +375,8 @@ async load() {
 
     });
 
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Erro ao salvar partida');
+
     await this.load();
 
     return match;
@@ -373,7 +385,7 @@ async load() {
 
   async update(id, patch) {
 
-    await fetch("/api/matches/" + id, {
+    const response = await fetch("/api/matches/" + encodeURIComponent(id), {
 
       method: "PUT",
 
@@ -385,17 +397,21 @@ async load() {
 
     });
 
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Erro ao alterar partida');
+
     await this.load();
 
   },
 
   async remove(id) {
 
-    await fetch("/api/matches/" + id, {
+    const response = await fetch("/api/matches/" + encodeURIComponent(id), {
 
       method: "DELETE"
 
     });
+
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Erro ao excluir partida');
 
     await this.load();
 
@@ -637,14 +653,22 @@ const PlayerForm = {
     return;
   }
 
-  if (editing)
-    await Players.rename(editing.id, name);
-  else
-    await Players.add(name);
+  const saveButton = document.getElementById('pf-save');
+  saveButton.disabled = true;
+  try {
+    if (editing)
+      await Players.rename(editing.id, name);
+    else
+      await Players.add(name);
 
-  Modal.close();
-  Router.render();
-  Toast.show('Jogador salvo');
+    Modal.close();
+    Router.render();
+    Toast.show('Jogador salvo');
+  } catch (err) {
+    console.error(err);
+    Toast.show(err.message || 'Não foi possível salvar o jogador');
+    saveButton.disabled = false;
+  }
 
 };
 
@@ -659,11 +683,14 @@ if (delBtn) {
       `Remover ${editing.name}? O histórico de partidas será mantido, mas o jogador sairá das listagens.`,
       async () => {
 
-        await Players.remove(editing.id);
-
-        Router.go('players');
-
-        Toast.show('Jogador excluído');
+        try {
+          await Players.remove(editing.id);
+          Router.go('players');
+          Toast.show('Jogador excluído');
+        } catch (err) {
+          console.error(err);
+          Toast.show(err.message || 'Não foi possível excluir o jogador');
+        }
 
       },
       'Excluir'
@@ -1503,9 +1530,10 @@ async function initApp() {
 
   await DB.load();
 
-  await Players.load();
-
-  await Matches.load();
+  const results = await Promise.allSettled([Players.load(), Matches.load()]);
+  if (results.some((result) => result.status === 'rejected')) {
+    Toast.show('Erro ao carregar dados. Tente atualizar a página.');
+  }
  
   document.querySelectorAll('[data-nav]').forEach((el) => {
     el.addEventListener('click', () => Router.go(el.dataset.nav));

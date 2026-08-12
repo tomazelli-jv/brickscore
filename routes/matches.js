@@ -64,6 +64,11 @@ router.post("/", async (req, res) => {
 
         const m = req.body;
 
+        if (!m.id || !m.date || !m.format || !m.teamA || !m.teamB ||
+            !Array.isArray(m.teamAIds) || !Array.isArray(m.teamBIds) ||
+            !m.stats || typeof m.stats !== "object")
+            return res.status(400).json({ error: "Dados da partida incompletos ou inválidos." });
+
         const [result] = await db.query(`
             INSERT INTO matches
             (
@@ -86,7 +91,7 @@ router.post("/", async (req, res) => {
         `, [
 
             m.id,
-            m.date,
+            new Date(m.date),
             m.season,
             m.format,
             m.teamA,
@@ -125,7 +130,12 @@ router.put("/:id", async (req, res) => {
 
         const m = req.body;
 
-        await db.query(`
+        if (!m.format || !m.teamA || !m.teamB ||
+            !Array.isArray(m.teamAIds) || !Array.isArray(m.teamBIds) ||
+            !m.stats || typeof m.stats !== "object")
+            return res.status(400).json({ error: "Dados da partida incompletos ou inválidos." });
+
+        const [result] = await db.query(`
             UPDATE matches
             SET
                 format=?,
@@ -157,6 +167,9 @@ router.put("/:id", async (req, res) => {
 
         ]);
 
+        if (!result.affectedRows)
+            return res.status(404).json({ error: "Partida não encontrada." });
+
         res.json({
             success:true
         });
@@ -178,10 +191,13 @@ router.delete("/:id", async(req,res)=>{
 
     try{
 
-        await db.query(
+        const [result] = await db.query(
             "DELETE FROM matches WHERE id=?",
             [req.params.id]
         );
+
+        if (!result.affectedRows)
+            return res.status(404).json({ error: "Partida não encontrada." });
 
         res.json({
             success:true
