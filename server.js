@@ -33,16 +33,10 @@ app.get("*", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-async function start() {
-    try {
-        await require("./database").initialize();
-        app.listen(PORT, () => {
-            console.log(`Servidor iniciado na porta ${PORT}`);
-        });
-    } catch (err) {
-        console.error("Falha ao preparar o banco de dados:", err);
-        process.exitCode = 1;
-    }
-}
+app.listen(PORT, () => {
+    console.log(`Servidor iniciado na porta ${PORT}`);
 
-start();
+    require("./database").initialize().catch((err) => {
+        console.error("Falha ao preparar o banco de dados:", err);
+    });
+});
