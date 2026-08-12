@@ -8,6 +8,9 @@
    MODULE: DB  (persistência em localStorage)
    ============================================================= */
 const DB_KEY = 'brickscore_db_v1';
+const API_BASE = ['127.0.0.1', 'localhost'].includes(location.hostname) && location.port === '5500'
+  ? 'https://brickscore.tomaz.host'
+  : '';
 
 const DB = (() => {
 
@@ -33,7 +36,7 @@ const DB = (() => {
 
         try {
 
-            const response = await fetch('/api/db');
+            const response = await fetch(`${API_BASE}/api/db`);
 
             if (!response.ok)
                 throw new Error('Erro ao buscar banco');
@@ -73,7 +76,7 @@ const DB = (() => {
 
    async function save() {
     try {
-        const response = await fetch("/api/db", {
+        const response = await fetch(`${API_BASE}/api/db`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -217,7 +220,7 @@ const Players = {
   list: [],
 
   async load() {
-    const response = await fetch("/api/players");
+    const response = await fetch(`${API_BASE}/api/players`);
     if (!response.ok) throw new Error(`Erro ao carregar jogadores (${response.status})`);
     const data = await response.json();
     if (!Array.isArray(data)) throw new Error('Resposta inválida de jogadores');
@@ -245,7 +248,7 @@ const Players = {
       createdAt: Utils.nowISO()
     };
 
-    const response = await fetch("/api/players", {
+    const response = await fetch(`${API_BASE}/api/players`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -263,7 +266,7 @@ const Players = {
 
   async rename(id, name) {
 
-    const response = await fetch("/api/players/" + encodeURIComponent(id), {
+    const response = await fetch(`${API_BASE}/api/players/` + encodeURIComponent(id), {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -281,7 +284,7 @@ const Players = {
 
   async remove(id) {
 
-    const response = await fetch("/api/players/" + encodeURIComponent(id), {
+    const response = await fetch(`${API_BASE}/api/players/` + encodeURIComponent(id), {
       method: "DELETE"
     });
 
@@ -315,7 +318,7 @@ const Matches = {
 
 async load() {
 
-    const response = await fetch("/api/matches");
+    const response = await fetch(`${API_BASE}/api/matches`);
     if (!response.ok) throw new Error(`Erro ao carregar partidas (${response.status})`);
     const data = await response.json();
     if (!Array.isArray(data)) throw new Error('Resposta inválida de partidas');
@@ -363,7 +366,7 @@ async load() {
 
     match.id = Utils.uid();
 
-    const response = await fetch("/api/matches", {
+    const response = await fetch(`${API_BASE}/api/matches`, {
 
       method: "POST",
 
@@ -385,7 +388,7 @@ async load() {
 
   async update(id, patch) {
 
-    const response = await fetch("/api/matches/" + encodeURIComponent(id), {
+    const response = await fetch(`${API_BASE}/api/matches/` + encodeURIComponent(id), {
 
       method: "PUT",
 
@@ -405,7 +408,7 @@ async load() {
 
   async remove(id) {
 
-    const response = await fetch("/api/matches/" + encodeURIComponent(id), {
+    const response = await fetch(`${API_BASE}/api/matches/` + encodeURIComponent(id), {
 
       method: "DELETE"
 
