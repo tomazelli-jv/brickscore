@@ -23,9 +23,14 @@ pool.initialize = async function initializeDatabase() {
     await pool.query(`CREATE TABLE IF NOT EXISTS players (
         id VARCHAR(64) NOT NULL PRIMARY KEY,
         name VARCHAR(120) NOT NULL,
+        photo LONGTEXT NULL,
         created_at DATETIME NOT NULL,
         INDEX idx_players_name (name)
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+
+    const [photoColumns] = await pool.query("SHOW COLUMNS FROM players LIKE 'photo'");
+    if (!photoColumns.length)
+        await pool.query("ALTER TABLE players ADD COLUMN photo LONGTEXT NULL AFTER name");
 
     await pool.query(`CREATE TABLE IF NOT EXISTS matches (
         id VARCHAR(64) NOT NULL PRIMARY KEY,

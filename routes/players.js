@@ -2,6 +2,11 @@ const express = require("express");
 const router = express.Router();
 const db = require("../database");
 
+function validPhoto(photo) {
+    return photo === null || photo === undefined ||
+        (typeof photo === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(photo) && photo.length <= 1500000);
+}
+
 // Listar jogadores
 router.get("/", async (req, res) => {
 
@@ -11,7 +16,8 @@ router.get("/", async (req, res) => {
             SELECT
                 id,
                 name,
-                created_at
+                photo,
+                created_at AS createdAt
             FROM players
             ORDER BY name
         `);
@@ -35,8 +41,10 @@ router.post("/", async (req, res) => {
 
     try {
 
-        const { id, name, createdAt } = req.body;
+        const { id, name, photo, createdAt } = req.body;
         const cleanName = typeof name === "string" ? name.trim() : "";
+        if (!validPhoto(photo))
+            return res.status(400).json({ error: "Foto inválida ou muito grande." });
         if (!id || !cleanName)
             return res.status(400).json({ error: "Id e nome do jogador são obrigatórios." });
 
@@ -45,13 +53,15 @@ router.post("/", async (req, res) => {
             (
                 id,
                 name,
+                photo,
                 created_at
             )
             VALUES
-            (?, ?, ?)
+            (?, ?, ?, ?)
         `, [
             id,
             cleanName,
+            photo || null,
             createdAt ? new Date(createdAt) : new Date()
         ]);
 
@@ -77,16 +87,20 @@ router.put("/:id", async (req, res) => {
     try {
 
         const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+        if (!validPhoto(req.body.photo))
+            return res.status(400).json({ error: "Foto inválida ou muito grande." });
         if (!name)
             return res.status(400).json({ error: "Nome do jogador é obrigatório." });
 
         const [result] = await db.query(`
             UPDATE players
             SET
-                name = ?
+                name = ?,
+                photo = ?
             WHERE id = ?
         `, [
             name,
+            req.body.photo || null,
             req.params.id
         ]);
 

@@ -184,6 +184,46 @@ const Utils = {
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   },
+  validPhoto(photo) {
+    return typeof photo === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(photo);
+  },
+  avatarHtml(player, extraClass = '') {
+    const classes = `avatar ${extraClass}`.trim();
+    if (player && Utils.validPhoto(player.photo))
+      return `<div class="${classes} has-photo"><img src="${player.photo}" alt="" loading="lazy"></div>`;
+    return `<div class="${classes}">${Utils.initials(player?.name || '?')}</div>`;
+  },
+  resizePhoto(file, maxSize = 512) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type.startsWith('image/')) {
+        reject(new Error('Selecione uma imagem válida'));
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        reject(new Error('A foto deve ter no máximo 10 MB'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Não foi possível ler a foto'));
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = () => reject(new Error('Imagem inválida'));
+        image.onload = () => {
+          const side = Math.min(image.naturalWidth, image.naturalHeight);
+          const canvas = document.createElement('canvas');
+          canvas.width = maxSize;
+          canvas.height = maxSize;
+          const ctx = canvas.getContext('2d');
+          const sourceX = (image.naturalWidth - side) / 2;
+          const sourceY = (image.naturalHeight - side) / 2;
+          ctx.drawImage(image, sourceX, sourceY, side, side, 0, 0, maxSize, maxSize);
+          resolve(canvas.toDataURL('image/jpeg', .82));
+        };
+        image.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  },
   weekRange(refDate = new Date()) {
     const d = new Date(refDate);
     const day = (d.getDay() + 6) % 7; // 0 = segunda
@@ -255,11 +295,12 @@ const Players = {
 
   },
 
-  async add(name) {
+  async add(name, photo = null) {
 
     const player = {
       id: Utils.uid(),
       name: name.trim(),
+      photo,
       createdAt: Utils.nowISO()
     };
 
@@ -279,7 +320,7 @@ const Players = {
 
   },
 
-  async rename(id, name) {
+  async rename(id, name, photo = null) {
 
     const response = await fetch(`${API_BASE}/api/players/` + encodeURIComponent(id), {
       method: "PUT",
@@ -287,7 +328,8 @@ const Players = {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        name
+        name,
+        photo
       })
     });
 
@@ -643,10 +685,20 @@ const Modal = {
 const PlayerForm = {
   open(playerId) {
     const editing = playerId ? Players.byId(playerId) : null;
+    let photo = editing?.photo || null;
     Modal.open(`
       <div class="modal-header"><h2>${editing ? 'Editar jogador' : 'Novo jogador'}</h2>
         <button class="modal-close" id="pf-close">✕</button></div>
       <div class="modal-body">
+        <div class="player-photo-picker">
+          <div id="pf-photo-preview">${Utils.avatarHtml({ name: editing?.name || 'Novo jogador', photo }, 'xl')}</div>
+          <div class="player-photo-actions">
+            <label class="btn-secondary" for="pf-photo">Escolher foto</label>
+            <button type="button" class="btn-ghost ${photo ? '' : 'hidden'}" id="pf-photo-remove">Remover foto</button>
+          </div>
+          <input type="file" id="pf-photo" accept="image/jpeg,image/png,image/webp" hidden>
+          <span class="photo-hint">A foto será recortada e otimizada automaticamente.</span>
+        </div>
         <div class="field">
           <label>Nome do jogador</label>
           <input type="text" id="pf-name" placeholder="Ex: João Silva" value="${editing ? Utils.escapeHtml(editing.name) : ''}" maxlength="40">
@@ -660,6 +712,26 @@ const PlayerForm = {
     const cancelBtn = document.getElementById('pf-cancel');
     if (cancelBtn) cancelBtn.onclick = Modal.close;
     const input = document.getElementById('pf-name');
+    const photoInput = document.getElementById('pf-photo');
+    const photoPreview = document.getElementById('pf-photo-preview');
+    const removePhotoButton = document.getElementById('pf-photo-remove');
+    const paintPhotoPreview = () => {
+      photoPreview.innerHTML = Utils.avatarHtml({ name: input.value.trim() || 'Novo jogador', photo }, 'xl');
+      removePhotoButton.classList.toggle('hidden', !photo);
+    };
+    photoInput.onchange = async () => {
+      const file = photoInput.files[0];
+      if (!file) return;
+      try {
+        photo = await Utils.resizePhoto(file);
+        paintPhotoPreview();
+      } catch (err) {
+        Toast.show(err.message);
+      }
+      photoInput.value = '';
+    };
+    removePhotoButton.onclick = () => { photo = null; paintPhotoPreview(); };
+    input.oninput = () => { if (!photo) paintPhotoPreview(); };
     setTimeout(() => input.focus(), 50);
 
     document.getElementById('pf-save').onclick = async () => {
@@ -675,9 +747,9 @@ const PlayerForm = {
   saveButton.disabled = true;
   try {
     if (editing)
-      await Players.rename(editing.id, name);
+      await Players.rename(editing.id, name, photo);
     else
-      await Players.add(name);
+      await Players.add(name, photo);
 
     Modal.close();
     Router.render();
@@ -893,7 +965,7 @@ const MatchWizard = {
         <div class="player-pick-list" id="mw-pick-list">
           ${list.length ? list.map((p) => `
             <div class="player-pick-row ${s.selected.has(p.id) ? 'selected' : ''}" data-id="${p.id}">
-              <div class="avatar sm orange">🏀</div>
+              ${Utils.avatarHtml(p, 'sm orange')}
               <div class="row-main"><div class="row-title">${Utils.escapeHtml(p.name)}</div></div>
               <div class="pick-toggle">${s.selected.has(p.id) ? '✓' : '+'}</div>
             </div>`).join('') : '<div class="empty-state">Nenhum jogador. Cadastre em "Jogadores".</div>'}
@@ -1457,7 +1529,7 @@ const UI = {
     return `
       <div class="list-row" data-id="${r.player.id}">
         <div class="rank-pos ${posClass}">${i + 1}</div>
-        <div class="avatar sm">${Utils.initials(r.player.name)}</div>
+        ${Utils.avatarHtml(r.player, 'sm')}
         <div class="row-main">
           <div class="row-title">${Utils.escapeHtml(r.player.name)}</div>
           <div class="row-sub">${r.stats.games} jogos · ${r.stats.wins}V ${r.stats.losses}D</div>
@@ -1504,7 +1576,7 @@ const UI = {
       const s = Stats.forPlayer(p.id);
       return `
         <div class="list-row" data-id="${p.id}">
-          <div class="avatar">${Utils.initials(p.name)}</div>
+          ${Utils.avatarHtml(p)}
           <div class="row-main">
             <div class="row-title">${Utils.escapeHtml(p.name)}</div>
             <div class="row-sub">${s.games} jogos · ${s.wins}V ${s.losses}D</div>
@@ -1530,7 +1602,7 @@ const UI = {
 
     content.innerHTML = `
       <div class="profile-hero">
-        <div class="avatar">${Utils.initials(p.name)}</div>
+        ${Utils.avatarHtml(p)}
         <div class="name">${Utils.escapeHtml(p.name)}</div>
         <div class="since">Desde ${Utils.formatDateFull(p.createdAt)}</div>
         <div class="badge-row">
@@ -1630,6 +1702,12 @@ const UI = {
     if (!m) { content.innerHTML = '<div class="empty-state">Partida não encontrada.</div>'; return; }
     const mvp = m.mvpId ? Players.byId(m.mvpId) : null;
     const aWin = m.winner === 'A'; const bWin = m.winner === 'B';
+    const leaderFor = (ids) => ids
+      .map((id) => ({ player: Players.byId(id), points: Number(m.stats[id]?.points) || 0 }))
+      .filter((row) => row.player)
+      .sort((a, b) => b.points - a.points)[0] || null;
+    const leaderA = leaderFor(m.teamAIds);
+    const leaderB = leaderFor(m.teamBIds);
 
     const tableFor = (ids) => `
       <table class="stat-table">
@@ -1644,18 +1722,34 @@ const UI = {
       </table>`;
 
     content.innerHTML = `
-      <div style="text-align:center;">
-        <div class="eyebrow">${m.winner === 'draw' ? 'PARTIDA FINALIZADA' : 'PARTIDA FINALIZADA'}</div>
-        <p style="color:var(--text-dim);font-size:12.5px;margin:4px 0 14px;">${Utils.formatDateFull(m.date)} · ${m.format}</p>
+      <div class="match-scoreboard">
+        <div class="scoreboard-topline">
+          <span>Partida finalizada</span>
+          <span>${Utils.formatDateFull(m.date)} · ${m.format}</span>
+        </div>
+        <div class="scoreboard-main">
+          <div class="scoreboard-team ${aWin ? 'winner' : ''}">
+            <div class="team-mark">${Utils.initials(m.teamA)}</div>
+            <strong>${Utils.escapeHtml(m.teamA)}</strong>
+            ${aWin ? '<span class="winner-chip">Vencedor</span>' : ''}
+          </div>
+          <div class="scoreboard-score">
+            <strong class="${aWin ? 'winner-score' : ''}">${m.scoreA}</strong>
+            <span>×</span>
+            <strong class="${bWin ? 'winner-score' : ''}">${m.scoreB}</strong>
+          </div>
+          <div class="scoreboard-team ${bWin ? 'winner' : ''}">
+            <div class="team-mark">${Utils.initials(m.teamB)}</div>
+            <strong>${Utils.escapeHtml(m.teamB)}</strong>
+            ${bWin ? '<span class="winner-chip">Vencedor</span>' : ''}
+          </div>
+        </div>
+        <div class="scoreboard-result">${m.winner === 'draw' ? 'Partida empatada' : `${Utils.escapeHtml(aWin ? m.teamA : m.teamB)} venceu a partida`}</div>
+        <div class="scoreboard-leaders">
+          <div><span>Cestinha ${Utils.escapeHtml(m.teamA)}</span><strong>${leaderA ? `${Utils.escapeHtml(leaderA.player.name)} · ${leaderA.points} pts` : '—'}</strong></div>
+          <div><span>Cestinha ${Utils.escapeHtml(m.teamB)}</span><strong>${leaderB ? `${Utils.escapeHtml(leaderB.player.name)} · ${leaderB.points} pts` : '—'}</strong></div>
+        </div>
       </div>
-
-      <div class="score-preview">
-        <div class="side ${aWin ? 'win' : ''}"><div class="tname">${Utils.escapeHtml(m.teamA)}</div><div class="tscore">${m.scoreA}</div></div>
-        <div class="vs">VS</div>
-        <div class="side ${bWin ? 'win' : ''}"><div class="tname">${Utils.escapeHtml(m.teamB)}</div><div class="tscore">${m.scoreB}</div></div>
-      </div>
-
-      ${m.winner !== 'draw' ? `<div class="winner-banner">🏆 ${Utils.escapeHtml(aWin ? m.teamA : m.teamB)} venceu</div>` : '<div class="winner-banner">🤝 Empate</div>'}
 
       ${mvp ? `<div class="mvp-banner"><div><div class="mtag">⭐ MVP DA PARTIDA</div><div class="mname">${Utils.escapeHtml(mvp.name)}</div></div></div>`
         : (m.mvpTie ? `<div class="mvp-banner"><div><div class="mtag">⭐ EMPATE DE MVP</div><div class="mname">${m.mvpTie.map((id) => Utils.escapeHtml(Players.byId(id)?.name || '?')).join(' / ')}</div></div></div>` : '')}
@@ -1903,8 +1997,8 @@ const UI = {
         <div class="field"><label for="compare-player-b">Jogador 2</label><select id="compare-player-b">${optionList(playerB.id)}</select></div>
       </div>
       <div class="comparison-players">
-        <button type="button" data-profile="${playerA.id}"><span class="avatar">${Utils.initials(playerA.name)}</span><strong>${Utils.escapeHtml(playerA.name)}</strong></button>
-        <button type="button" data-profile="${playerB.id}"><span class="avatar">${Utils.initials(playerB.name)}</span><strong>${Utils.escapeHtml(playerB.name)}</strong></button>
+        <button type="button" data-profile="${playerA.id}">${Utils.avatarHtml(playerA)}<strong>${Utils.escapeHtml(playerA.name)}</strong></button>
+        <button type="button" data-profile="${playerB.id}">${Utils.avatarHtml(playerB)}<strong>${Utils.escapeHtml(playerB.name)}</strong></button>
       </div>
       <div class="card comparison-table">${metricRows}</div>
       <div class="records-heading">Confronto direto</div>
@@ -2007,7 +2101,7 @@ const UI = {
         ${selection.length ? selection.map((row, index) => `
           <div class="list-row" data-player="${row.player.id}">
             <div class="rank-pos ${index === 0 ? 'gold' : ''}">${index + 1}</div>
-            <div class="avatar sm">${Utils.initials(row.player.name)}</div>
+            ${Utils.avatarHtml(row.player, 'sm')}
             <div class="row-main"><div class="row-title">${Utils.escapeHtml(row.player.name)}</div><div class="row-sub">${row.stats.games} jogos · ${row.stats.wins} vitórias</div></div>
             <div class="row-value"><div class="big">${row.stats.efficiency}</div><div class="small">eficiência</div></div>
           </div>`).join('') : '<div class="empty-state">É preciso ter mais partidas para formar a seleção.</div>'}
@@ -2133,6 +2227,7 @@ const CompleteDataTransfer = {
         players: Players.all().map((player) => ({
           id: player.id,
           name: player.name,
+          photo: player.photo || null,
           createdAt: player.createdAt || player.created_at,
         })),
         matches: Matches.all(),

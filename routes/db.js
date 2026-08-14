@@ -21,7 +21,7 @@ router.get("/backup", async (req, res) => {
     try {
         const [[stateRows], [players], [matches]] = await Promise.all([
             db.query("SELECT data FROM app_state WHERE id = 1 LIMIT 1"),
-            db.query("SELECT id, name, created_at FROM players ORDER BY name"),
+            db.query("SELECT id, name, photo, created_at FROM players ORDER BY name"),
             db.query("SELECT * FROM matches ORDER BY date DESC")
         ]);
         const state = stateRows.length ? parseJson(stateRows[0].data) : {};
@@ -29,7 +29,7 @@ router.get("/backup", async (req, res) => {
             ...state,
             version: 2,
             exportedAt: new Date().toISOString(),
-            players: players.map((p) => ({ id: p.id, name: p.name, createdAt: p.created_at })),
+            players: players.map((p) => ({ id: p.id, name: p.name, photo: p.photo, createdAt: p.created_at })),
             matches: matches.map(serializeMatch)
         });
     } catch (err) {
@@ -52,9 +52,11 @@ router.post("/restore", async (req, res) => {
         for (const player of backup.players) {
             if (!player.id || typeof player.name !== "string" || !player.name.trim())
                 throw new Error("O backup contém um jogador inválido.");
+            if (player.photo && (!/^data:image\/(jpeg|png|webp);base64,/.test(player.photo) || player.photo.length > 1500000))
+                throw new Error("O backup contém uma foto inválida ou muito grande.");
             await connection.query(
-                "INSERT INTO players (id, name, created_at) VALUES (?, ?, ?)",
-                [player.id, player.name.trim(), new Date(player.createdAt || player.created_at || Date.now())]
+                "INSERT INTO players (id, name, photo, created_at) VALUES (?, ?, ?, ?)",
+                [player.id, player.name.trim(), player.photo || null, new Date(player.createdAt || player.created_at || Date.now())]
             );
         }
 

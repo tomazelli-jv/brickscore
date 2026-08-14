@@ -22,6 +22,7 @@ data = data;
 CREATE TABLE IF NOT EXISTS players (
     id VARCHAR(64) NOT NULL PRIMARY KEY,
     name VARCHAR(120) NOT NULL,
+    photo LONGTEXT NULL,
     created_at DATETIME NOT NULL,
     INDEX idx_players_name (name)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
