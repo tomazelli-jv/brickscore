@@ -754,6 +754,10 @@ const MatchWizard = {
         teamAIds: editing.teamAIds.slice(),
         teamBIds: editing.teamBIds.slice(),
         statsMap: JSON.parse(JSON.stringify(editing.stats)),
+        finalScoreA: Number(editing.scoreA) || 0,
+        finalScoreB: Number(editing.scoreB) || 0,
+        scoreAManual: true,
+        scoreBManual: true,
         search: '',
       };
     } else if (previousMatch) {
@@ -771,6 +775,10 @@ const MatchWizard = {
         teamAIds,
         teamBIds,
         statsMap: {},
+        finalScoreA: null,
+        finalScoreB: null,
+        scoreAManual: false,
+        scoreBManual: false,
         search: '',
       };
     } else {
@@ -784,6 +792,10 @@ const MatchWizard = {
         teamAIds: [],
         teamBIds: [],
         statsMap: {},
+        finalScoreA: null,
+        finalScoreB: null,
+        scoreAManual: false,
+        scoreBManual: false,
         search: '',
       };
     }
@@ -999,8 +1011,10 @@ const MatchWizard = {
 
   renderStatsStep(body, footer) {
     const s = this.state;
-    const scoreA = s.teamAIds.reduce((sum, id) => sum + (Number(s.statsMap[id]?.points) || 0), 0);
-    const scoreB = s.teamBIds.reduce((sum, id) => sum + (Number(s.statsMap[id]?.points) || 0), 0);
+    const statsScoreA = s.teamAIds.reduce((sum, id) => sum + (Number(s.statsMap[id]?.points) || 0), 0);
+    const statsScoreB = s.teamBIds.reduce((sum, id) => sum + (Number(s.statsMap[id]?.points) || 0), 0);
+    const scoreA = s.scoreAManual ? s.finalScoreA : statsScoreA;
+    const scoreB = s.scoreBManual ? s.finalScoreB : statsScoreB;
 
     const rowsFor = (ids) => ids.map((id) => {
       const p = Players.byId(id);
@@ -1016,15 +1030,20 @@ const MatchWizard = {
 
     body.innerHTML = `
       <div class="score-preview" id="mw-score-preview">
-        <div class="side"><div class="tname">${Utils.escapeHtml(s.teamAName)}</div><div class="tscore" id="mw-scoreA">${scoreA}</div></div>
+        <div class="side"><div class="tname">${Utils.escapeHtml(s.teamAName)}</div><input class="final-score-input" id="mw-scoreA" type="number" min="0" value="${scoreA}" aria-label="Placar final ${Utils.escapeHtml(s.teamAName)}"></div>
         <div class="vs">VS</div>
-        <div class="side"><div class="tname">${Utils.escapeHtml(s.teamBName)}</div><div class="tscore" id="mw-scoreB">${scoreB}</div></div>
+        <div class="side"><div class="tname">${Utils.escapeHtml(s.teamBName)}</div><input class="final-score-input" id="mw-scoreB" type="number" min="0" value="${scoreB}" aria-label="Placar final ${Utils.escapeHtml(s.teamBName)}"></div>
       </div>
+      <div class="score-sum-note" id="mw-score-note"></div>
       <div class="section-sub">${Utils.escapeHtml(s.teamAName)}</div>
       ${rowsFor(s.teamAIds)}
       <div class="section-sub">${Utils.escapeHtml(s.teamBName)}</div>
       ${rowsFor(s.teamBIds)}
     `;
+
+    const scoreAInput = document.getElementById('mw-scoreA');
+    const scoreBInput = document.getElementById('mw-scoreB');
+    const scoreNote = document.getElementById('mw-score-note');
 
     const recalc = () => {
       body.querySelectorAll('.stat-input-row').forEach((row) => {
@@ -1037,10 +1056,21 @@ const MatchWizard = {
       });
       const nScoreA = s.teamAIds.reduce((sum, id) => sum + (s.statsMap[id]?.points || 0), 0);
       const nScoreB = s.teamBIds.reduce((sum, id) => sum + (s.statsMap[id]?.points || 0), 0);
-      document.getElementById('mw-scoreA').textContent = nScoreA;
-      document.getElementById('mw-scoreB').textContent = nScoreB;
+      if (!s.scoreAManual) scoreAInput.value = nScoreA;
+      if (!s.scoreBManual) scoreBInput.value = nScoreB;
+      s.finalScoreA = Math.max(0, Number(scoreAInput.value) || 0);
+      s.finalScoreB = Math.max(0, Number(scoreBInput.value) || 0);
+
+      const differs = s.finalScoreA !== nScoreA || s.finalScoreB !== nScoreB;
+      scoreNote.classList.toggle('warning', differs);
+      scoreNote.textContent = differs
+        ? `Placar manual. Soma dos jogadores: ${nScoreA} x ${nScoreB}.`
+        : 'O placar corresponde à soma dos pontos dos jogadores.';
     };
-    body.querySelectorAll('input').forEach((inp) => { inp.oninput = recalc; });
+    body.querySelectorAll('.stat-input-row input').forEach((inp) => { inp.oninput = recalc; });
+    scoreAInput.oninput = () => { s.scoreAManual = true; recalc(); };
+    scoreBInput.oninput = () => { s.scoreBManual = true; recalc(); };
+    recalc();
 
     footer.innerHTML = `
       <button class="btn-secondary" id="mw-back">Voltar</button>
@@ -1094,8 +1124,8 @@ const MatchWizard = {
 
   async save() {
     const s = this.state;
-    const scoreA = s.teamAIds.reduce((sum, id) => sum + (s.statsMap[id]?.points || 0), 0);
-    const scoreB = s.teamBIds.reduce((sum, id) => sum + (s.statsMap[id]?.points || 0), 0);
+    const scoreA = Math.max(0, Number(s.finalScoreA) || 0);
+    const scoreB = Math.max(0, Number(s.finalScoreB) || 0);
     const winner = scoreA === scoreB ? 'draw' : (scoreA > scoreB ? 'A' : 'B');
     const { mvpId, tie } = this.computeMvp();
     const date = s.editingId ? Matches.byId(s.editingId).date : Utils.nowISO();
