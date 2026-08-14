@@ -1163,6 +1163,7 @@ const State = {
   matchesSeasonFilter: 'todas',
   rankingPeriod: 'geral',
   rankingType: 'pontos',
+  rankingView: 'ranking',
 };
 
 const Router = {
@@ -1499,6 +1500,23 @@ const UI = {
 
   /* ---------------- RANKING ---------------- */
   renderRanking() {
+    const tabs = document.getElementById('ranking-view-tabs');
+    tabs.querySelectorAll('[data-ranking-view]').forEach((tab) => {
+      tab.classList.toggle('active', tab.dataset.rankingView === State.rankingView);
+      tab.onclick = () => {
+        State.rankingView = tab.dataset.rankingView;
+        UI.renderRanking();
+      };
+    });
+
+    document.getElementById('ranking-content').classList.toggle('hidden', State.rankingView !== 'ranking');
+    document.getElementById('records-content').classList.toggle('hidden', State.rankingView !== 'records');
+
+    if (State.rankingView === 'records') {
+      UI.renderRecords();
+      return;
+    }
+
     const periodChips = document.getElementById('ranking-period-filter');
     const periods = [['hoje', 'Hoje'], ['semana', 'Semana'], ['mes', 'Mês'], ['temporada', 'Temporada'], ['geral', 'Geral']];
     periodChips.innerHTML = periods.map(([k, label]) => `<div class="filter-chip ${State.rankingPeriod === k ? 'active' : ''}" data-p="${k}">${label}</div>`).join('');
@@ -1514,6 +1532,83 @@ const UI = {
     const wrap = document.getElementById('ranking-list');
     wrap.innerHTML = rank.length ? rank.map((r, i) => UI.rankRowHtml(r, i)).join('') : '<div class="empty-state">Sem dados para este filtro.</div>';
     wrap.querySelectorAll('.list-row').forEach((row) => { row.onclick = () => Router.go('player-profile', { playerProfileId: row.dataset.id }); });
+  },
+
+  renderRecords() {
+    const matches = Matches.all();
+    const wrap = document.getElementById('records-content');
+
+    if (!matches.length) {
+      wrap.innerHTML = '<div class="card"><div class="empty-state">Registre partidas para criar os recordes da liga.</div></div>';
+      return;
+    }
+
+    let maxPoints = null;
+    let maxAssists = null;
+    let maxThree = null;
+    let maxTeamScore = null;
+    let maxMatchScore = null;
+    let maxMargin = null;
+    let closestMatch = null;
+
+    const keepMax = (current, candidate) => !current || candidate.value > current.value ? candidate : current;
+    const keepMin = (current, candidate) => !current || candidate.value < current.value ? candidate : current;
+
+    matches.forEach((match) => {
+      [...match.teamAIds, ...match.teamBIds].forEach((playerId) => {
+        const player = Players.byId(playerId);
+        const stats = match.stats[playerId] || {};
+        if (!player) return;
+        maxPoints = keepMax(maxPoints, { value: Number(stats.points) || 0, player, match });
+        maxAssists = keepMax(maxAssists, { value: Number(stats.assists) || 0, player, match });
+        maxThree = keepMax(maxThree, { value: Number(stats.threePoints) || 0, player, match });
+      });
+
+      const teamARecord = { value: Number(match.scoreA) || 0, team: match.teamA, match };
+      const teamBRecord = { value: Number(match.scoreB) || 0, team: match.teamB, match };
+      maxTeamScore = keepMax(keepMax(maxTeamScore, teamARecord), teamBRecord);
+      maxMatchScore = keepMax(maxMatchScore, { value: (Number(match.scoreA) || 0) + (Number(match.scoreB) || 0), match });
+      maxMargin = keepMax(maxMargin, { value: Math.abs((Number(match.scoreA) || 0) - (Number(match.scoreB) || 0)), match });
+      closestMatch = keepMin(closestMatch, { value: Math.abs((Number(match.scoreA) || 0) - (Number(match.scoreB) || 0)), match });
+    });
+
+    const streak = Players.all()
+      .map((player) => ({ player, value: Stats.forPlayer(player.id).bestStreak }))
+      .sort((a, b) => b.value - a.value)[0];
+
+    const playerRecord = (label, record, unit) => `
+      <div class="record-league-row" data-player="${record.player.id}">
+        <div class="record-league-main"><span class="record-league-label">${label}</span><strong>${Utils.escapeHtml(record.player.name)}</strong><small>${Utils.formatDateShort(record.match.date)}</small></div>
+        <div class="record-league-value">${record.value}<small>${unit}</small></div>
+      </div>`;
+    const matchRecord = (label, record, value, detail) => `
+      <div class="record-league-row" data-match="${record.match.id}">
+        <div class="record-league-main"><span class="record-league-label">${label}</span><strong>${Utils.escapeHtml(record.match.teamA)} x ${Utils.escapeHtml(record.match.teamB)}</strong><small>${Utils.formatDateShort(record.match.date)}${detail ? ' · ' + Utils.escapeHtml(detail) : ''}</small></div>
+        <div class="record-league-value">${value}</div>
+      </div>`;
+
+    wrap.innerHTML = `
+      <div class="records-heading">Recordes individuais</div>
+      <div class="card list-card">
+        ${playerRecord('Mais pontos em uma partida', maxPoints, 'pts')}
+        ${playerRecord('Mais assistências em uma partida', maxAssists, 'ast')}
+        ${playerRecord('Mais bolas de 3 em uma partida', maxThree, '3pt')}
+        ${streak ? `<div class="record-league-row" data-player="${streak.player.id}"><div class="record-league-main"><span class="record-league-label">Maior sequência de vitórias</span><strong>${Utils.escapeHtml(streak.player.name)}</strong></div><div class="record-league-value">${streak.value}<small>vitórias</small></div></div>` : ''}
+      </div>
+      <div class="records-heading">Recordes de partidas</div>
+      <div class="card list-card">
+        ${matchRecord('Maior placar de um time', maxTeamScore, maxTeamScore.value, maxTeamScore.team)}
+        ${matchRecord('Partida com mais pontos', maxMatchScore, maxMatchScore.value + ' pts')}
+        ${matchRecord('Maior diferença no placar', maxMargin, maxMargin.value + ' pts')}
+        ${matchRecord('Partida mais equilibrada', closestMatch, closestMatch.value === 0 ? 'Empate' : closestMatch.value + ' pt')}
+      </div>`;
+
+    wrap.querySelectorAll('[data-player]').forEach((row) => {
+      row.onclick = () => Router.go('player-profile', { playerProfileId: row.dataset.player });
+    });
+    wrap.querySelectorAll('[data-match]').forEach((row) => {
+      row.onclick = () => Router.go('match-detail', { matchDetailId: row.dataset.match });
+    });
   },
 
   /* ---------------- SETTINGS ---------------- */

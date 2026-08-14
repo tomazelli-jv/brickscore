@@ -97,12 +97,17 @@
 
     <!-- ---------- RANKING ---------- -->
     <section id="view-ranking" class="view hidden">
-      <div class="section-title">
-        <h1>Ranking</h1>
+      <div class="ranking-view-tabs" id="ranking-view-tabs">
+        <button class="ranking-view-tab active" data-ranking-view="ranking">Ranking geral</button>
+        <span>/</span>
+        <button class="ranking-view-tab" data-ranking-view="records">Recordes</button>
       </div>
-      <div class="filter-row" id="ranking-period-filter"></div>
-      <div class="filter-row" id="ranking-type-filter"></div>
-      <div class="card list-card" id="ranking-list"></div>
+      <div id="ranking-content">
+        <div class="filter-row" id="ranking-period-filter"></div>
+        <div class="filter-row" id="ranking-type-filter"></div>
+        <div class="card list-card" id="ranking-list"></div>
+      </div>
+      <div id="records-content" class="hidden"></div>
     </section>
 
     <!-- ---------- SETTINGS ---------- -->
