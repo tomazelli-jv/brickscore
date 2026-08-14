@@ -1179,6 +1179,7 @@ const State = {
   rankingView: 'ranking',
   comparePlayerA: null,
   comparePlayerB: null,
+  awardsSeason: null,
 };
 
 /* =============================================================
@@ -1715,6 +1716,7 @@ const UI = {
     document.getElementById('ranking-content').classList.toggle('hidden', State.rankingView !== 'ranking');
     document.getElementById('records-content').classList.toggle('hidden', State.rankingView !== 'records');
     document.getElementById('compare-content').classList.toggle('hidden', State.rankingView !== 'compare');
+    document.getElementById('awards-content').classList.toggle('hidden', State.rankingView !== 'awards');
 
     if (State.rankingView === 'records') {
       UI.renderRecords();
@@ -1723,6 +1725,11 @@ const UI = {
 
     if (State.rankingView === 'compare') {
       UI.renderPlayerComparison();
+      return;
+    }
+
+    if (State.rankingView === 'awards') {
+      UI.renderSeasonAwards();
       return;
     }
 
@@ -1921,6 +1928,96 @@ const UI = {
     };
     wrap.querySelectorAll('[data-profile]').forEach((button) => {
       button.onclick = () => Router.go('player-profile', { playerProfileId: button.dataset.profile });
+    });
+  },
+
+  renderSeasonAwards() {
+    const wrap = document.getElementById('awards-content');
+    const seasons = DB.data.seasons.slice().sort((a, b) => b - a);
+    if (!State.awardsSeason || !seasons.includes(Number(State.awardsSeason)))
+      State.awardsSeason = DB.data.currentSeason;
+
+    const season = Number(State.awardsSeason);
+    const matches = Matches.bySeason(season);
+    const seasonRows = Stats.forAllPlayers(matches);
+    const seasonChips = `<div class="filter-row awards-season-filter">${seasons.map((year) =>
+      `<button type="button" class="filter-chip ${year === season ? 'active' : ''}" data-awards-season="${year}">${year}</button>`
+    ).join('')}</div>`;
+
+    if (!matches.length || !seasonRows.length) {
+      wrap.innerHTML = `${seasonChips}<div class="card"><div class="empty-state">Ainda não há partidas suficientes na temporada ${season}.</div></div>`;
+      wrap.querySelectorAll('[data-awards-season]').forEach((button) => {
+        button.onclick = () => { State.awardsSeason = Number(button.dataset.awardsSeason); UI.renderSeasonAwards(); };
+      });
+      return;
+    }
+
+    const best = (getValue, minimumGames = 1) => seasonRows
+      .filter((row) => row.stats.games >= minimumGames)
+      .map((row) => ({ ...row, value: getValue(row.stats) }))
+      .sort((a, b) => b.value - a.value)[0] || null;
+    const minimumGames = Math.min(3, Math.max(1, matches.length));
+
+    const evolution = seasonRows.map((row) => {
+      const history = row.stats.history;
+      if (history.length < 4) return null;
+      const middle = Math.floor(history.length / 2);
+      const first = history.slice(0, middle);
+      const last = history.slice(middle);
+      const firstAvg = first.reduce((sum, game) => sum + game.points, 0) / first.length;
+      const lastAvg = last.reduce((sum, game) => sum + game.points, 0) / last.length;
+      return { ...row, value: Utils.round1(lastAvg - firstAvg) };
+    }).filter(Boolean).sort((a, b) => b.value - a.value)[0] || null;
+
+    const awards = [
+      { icon: '⭐', title: 'MVP da temporada', row: best((stats) => stats.mvps), unit: 'MVPs' },
+      { icon: '🏀', title: 'Cestinha', row: best((stats) => stats.points), unit: 'pontos' },
+      { icon: '🤝', title: 'Líder de assistências', row: best((stats) => stats.assists), unit: 'assistências' },
+      { icon: '🎯', title: 'Rei das bolas de 3', row: best((stats) => stats.threePoints), unit: 'bolas de 3' },
+      { icon: '🏆', title: 'Mais vitórias', row: best((stats) => stats.wins), unit: 'vitórias' },
+      { icon: '📈', title: 'Melhor média', row: best((stats) => stats.avgPoints, minimumGames), unit: 'pts/jogo' },
+      { icon: '⚡', title: 'Maior eficiência', row: best((stats) => stats.efficiency, minimumGames), unit: 'eficiência' },
+      { icon: '🔥', title: 'Melhor sequência', row: best((stats) => stats.bestStreak), unit: 'vitórias' },
+      { icon: '🚀', title: 'Maior evolução', row: evolution, unit: 'pts/jogo' },
+    ].filter((award) => award.row);
+
+    const selection = seasonRows
+      .filter((row) => row.stats.games >= minimumGames)
+      .sort((a, b) => b.stats.efficiency - a.stats.efficiency)
+      .slice(0, 5);
+
+    wrap.innerHTML = `
+      ${seasonChips}
+      <div class="awards-hero">
+        <span>Temporada ${season}</span>
+        <h2>Premiações da Liga</h2>
+        <p>${matches.length} partida${matches.length === 1 ? '' : 's'} considerada${matches.length === 1 ? '' : 's'}</p>
+      </div>
+      <div class="awards-grid">
+        ${awards.map((award) => `
+          <button type="button" class="award-card" data-player="${award.row.player.id}">
+            <span class="award-icon">${award.icon}</span>
+            <span class="award-title">${award.title}</span>
+            <strong>${Utils.escapeHtml(award.row.player.name)}</strong>
+            <span class="award-value">${award.row.value > 0 && award.title === 'Maior evolução' ? '+' : ''}${award.row.value} ${award.unit}</span>
+          </button>`).join('')}
+      </div>
+      <div class="records-heading">Seleção da temporada</div>
+      <div class="card list-card">
+        ${selection.length ? selection.map((row, index) => `
+          <div class="list-row" data-player="${row.player.id}">
+            <div class="rank-pos ${index === 0 ? 'gold' : ''}">${index + 1}</div>
+            <div class="avatar sm">${Utils.initials(row.player.name)}</div>
+            <div class="row-main"><div class="row-title">${Utils.escapeHtml(row.player.name)}</div><div class="row-sub">${row.stats.games} jogos · ${row.stats.wins} vitórias</div></div>
+            <div class="row-value"><div class="big">${row.stats.efficiency}</div><div class="small">eficiência</div></div>
+          </div>`).join('') : '<div class="empty-state">É preciso ter mais partidas para formar a seleção.</div>'}
+      </div>`;
+
+    wrap.querySelectorAll('[data-awards-season]').forEach((button) => {
+      button.onclick = () => { State.awardsSeason = Number(button.dataset.awardsSeason); UI.renderSeasonAwards(); };
+    });
+    wrap.querySelectorAll('[data-player]').forEach((element) => {
+      element.onclick = () => Router.go('player-profile', { playerProfileId: element.dataset.player });
     });
   },
 
