@@ -21,8 +21,6 @@ const DB = (() => {
         const year = new Date().getFullYear();
 
         return {
-            players: [],
-            matches: [],
             seasons: [year],
             currentSeason: year,
             leagueName: DEFAULT_LEAGUE_NAME
@@ -43,7 +41,7 @@ const DB = (() => {
 
             const data = await response.json();
 
-            if (!data.players || !data.matches) {
+            if (!data || typeof data !== 'object' || Array.isArray(data) || !Object.keys(data).length) {
 
                 state = empty();
 
@@ -52,6 +50,10 @@ const DB = (() => {
             } else {
 
                 state = data;
+
+                // Jogadores e partidas possuem tabelas próprias.
+                delete state.players;
+                delete state.matches;
 
                 if (!state.seasons)
                     state.seasons = [new Date().getFullYear()];
@@ -1574,6 +1576,72 @@ const DataTransfer = {
    INIT / EVENTOS GLOBAIS
    ============================================================= */
 
+const CompleteDataTransfer = {
+  async export() {
+    let backup = null;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/db/backup`);
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.includes('application/json'))
+        backup = await response.json();
+    } catch (err) {
+      console.warn('Endpoint de backup indisponivel; usando dados carregados.', err);
+    }
+
+    // Compatibilidade com servidores que ainda não possuem /api/db/backup.
+    if (!backup || !Array.isArray(backup.players) || !Array.isArray(backup.matches)) {
+      backup = {
+        ...DB.data,
+        version: 2,
+        exportedAt: Utils.nowISO(),
+        players: Players.all().map((player) => ({
+          id: player.id,
+          name: player.name,
+          createdAt: player.createdAt || player.created_at,
+        })),
+        matches: Matches.all(),
+      };
+    }
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `brickscore-backup-${Utils.todayISO()}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    Toast.show('Backup completo exportado');
+  },
+
+  async import(file) {
+    const backup = JSON.parse(await file.text());
+    if (!Array.isArray(backup.players) || !Array.isArray(backup.matches))
+      throw new Error('Formato de backup invalido');
+
+    const response = await fetch(`${API_BASE}/api/db/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(backup),
+    });
+    if (!response.ok)
+      throw new Error((await response.json().catch(() => null))?.error || 'Falha ao importar o backup');
+
+    await Promise.all([DB.load(), Players.load(), Matches.load()]);
+    Router.render();
+    Toast.show('Dados importados com sucesso');
+  },
+
+  async reset() {
+    const response = await fetch(`${API_BASE}/api/db/reset`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Falha ao apagar os dados');
+    await DB.reset();
+    await Promise.all([Players.load(), Matches.load()]);
+  },
+};
+
 async function initApp() {
 
   await DB.load();
@@ -1592,17 +1660,37 @@ async function initApp() {
   document.getElementById('btn-add-player').onclick = () => PlayerForm.open();
   document.getElementById('btn-profile').onclick = () => Router.go('settings');
   document.getElementById('btn-manage-seasons').onclick = () => SeasonManager.open();
-  document.getElementById('btn-export').onclick = () => DataTransfer.export();
+  document.getElementById('btn-export').onclick = async () => {
+    try {
+      await CompleteDataTransfer.export();
+    } catch (err) {
+      console.error(err);
+      Toast.show(err.message || 'Falha ao exportar backup');
+    }
+  };
   document.getElementById('btn-import').onclick = () => document.getElementById('import-file').click();
-  document.getElementById('import-file').onchange = (e) => {
-    if (e.target.files[0]) DataTransfer.import(e.target.files[0]);
+  document.getElementById('import-file').onchange = async (e) => {
+    if (e.target.files[0]) {
+      try {
+        await CompleteDataTransfer.import(e.target.files[0]);
+      } catch (err) {
+        console.error(err);
+        Toast.show(err.message || 'Arquivo invalido');
+      }
+    }
     e.target.value = '';
   };
   document.getElementById('btn-reset').onclick = () => {
     Modal.confirm('Apagar todos os dados', 'Esta ação é irreversível e removerá todos os jogadores e partidas deste dispositivo.', () => {
-      DB.reset();
-      Router.go('home');
-      Toast.show('Dados apagados');
+      CompleteDataTransfer.reset()
+        .then(() => {
+          Router.go('home');
+          Toast.show('Dados apagados');
+        })
+        .catch((err) => {
+          console.error(err);
+          Toast.show(err.message || 'Falha ao apagar os dados');
+        });
     }, 'Apagar tudo');
   };
 
