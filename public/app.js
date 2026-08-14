@@ -1243,6 +1243,7 @@ const MatchWizard = {
 const State = {
   view: 'home',
   playerProfileId: null,
+  profileChartMetric: 'points',
   matchDetailId: null,
   playersSearch: '',
   matchesSeasonFilter: 'todas',
@@ -1623,7 +1624,12 @@ const UI = {
       </div>
 
       <div class="section-sub">Evolução (últimos jogos)</div>
-      <div class="card sparkline-wrap">${UI.sparklineSvg(s.history)}</div>
+      <div class="profile-chart-tabs">
+        ${[['points', 'Pontos'], ['assists', 'Assistências'], ['threePoints', 'Bolas de 3']].map(([key, label]) =>
+          `<button type="button" class="filter-chip ${State.profileChartMetric === key ? 'active' : ''}" data-chart-metric="${key}">${label}</button>`
+        ).join('')}
+      </div>
+      <div class="card sparkline-wrap">${UI.sparklineSvg(s.history, State.profileChartMetric)}</div>
 
       <div class="section-sub">Recordes</div>
       <div class="card">
@@ -1649,27 +1655,56 @@ const UI = {
       row.onclick = () => Router.go('match-detail', { matchDetailId: row.dataset.id });
     });
     document.getElementById('pp-edit').onclick = () => PlayerForm.open(p.id);
+    content.querySelectorAll('[data-chart-metric]').forEach((button) => {
+      button.onclick = () => {
+        State.profileChartMetric = button.dataset.chartMetric;
+        UI.renderPlayerProfile();
+      };
+    });
+    content.querySelectorAll('[data-chart-point]').forEach((point) => {
+      point.onclick = () => Toast.show(`${point.dataset.date}: ${point.dataset.value} ${point.dataset.unit}`);
+    });
   },
 
-  sparklineSvg(history) {
+  sparklineSvg(history, metric = 'points') {
     const data = history.slice(-10);
     if (!data.length) return '<div class="empty-state">Sem dados suficientes.</div>';
-    const w = 500; const h = 90; const pad = 10;
-    const max = Math.max(...data.map((d) => d.points), 5);
-    const stepX = (w - pad * 2) / Math.max(data.length - 1, 1);
+    const config = {
+      points: { label: 'pontos', short: 'pts', color: '#FF7A1A' },
+      assists: { label: 'assistências', short: 'ast', color: '#38BDF8' },
+      threePoints: { label: 'bolas de 3', short: '3pt', color: '#A78BFA' },
+    }[metric] || { label: 'pontos', short: 'pts', color: '#FF7A1A' };
+    const w = 500; const h = 120; const padX = 16; const padY = 18;
+    const values = data.map((d) => Number(d[metric]) || 0);
+    const maxValue = Math.max(...values);
+    const max = Math.max(maxValue, 5);
+    const average = Utils.round1(values.reduce((sum, value) => sum + value, 0) / values.length);
     const pts = data.map((d, i) => {
-      const x = pad + i * stepX;
-      const y = h - pad - (d.points / max) * (h - pad * 2);
+      const x = padX + i * ((w - padX * 2) / Math.max(data.length - 1, 1));
+      const y = h - padY - ((Number(d[metric]) || 0) / max) * (h - padY * 2);
       return `${x},${y}`;
     });
+    const averageY = h - padY - (average / max) * (h - padY * 2);
+    const areaPoints = `${padX},${h - padY} ${pts.join(' ')} ${w - padX},${h - padY}`;
     const circles = data.map((d, i) => {
       const [x, y] = pts[i].split(',');
-      return `<circle cx="${x}" cy="${y}" r="3" fill="${d.win ? '#22C55E' : '#EF4444'}" />`;
+      const value = Number(d[metric]) || 0;
+      return `<circle class="chart-point" data-chart-point cx="${x}" cy="${y}" r="5" fill="${d.win ? '#22C55E' : '#EF4444'}" stroke="#171716" stroke-width="3" data-date="${Utils.formatDateShort(d.date)}" data-value="${value}" data-unit="${config.short}"><title>${Utils.formatDateShort(d.date)}: ${value} ${config.short}</title></circle>`;
     }).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
-      <polyline points="${pts.join(' ')}" fill="none" stroke="#FF7A1A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      ${circles}
-    </svg>`;
+    return `
+      <div class="chart-summary">
+        <div><span>Média</span><strong>${average}</strong></div>
+        <div><span>Pico</span><strong>${maxValue}</strong></div>
+        <div><span>Jogos</span><strong>${data.length}</strong></div>
+      </div>
+      <svg class="profile-chart" viewBox="0 0 ${w} ${h}" width="100%" height="${h}" aria-label="Evolução de ${config.label}">
+        <defs><linearGradient id="chart-area-${metric}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${config.color}" stop-opacity=".28"/><stop offset="1" stop-color="${config.color}" stop-opacity="0"/></linearGradient></defs>
+        <line x1="${padX}" y1="${averageY}" x2="${w - padX}" y2="${averageY}" stroke="#66655F" stroke-width="1" stroke-dasharray="5 6"/>
+        <polygon points="${areaPoints}" fill="url(#chart-area-${metric})"/>
+        <polyline points="${pts.join(' ')}" fill="none" stroke="${config.color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        ${circles}
+      </svg>
+      <div class="chart-legend"><span><i class="win"></i> Vitória</span><span><i class="loss"></i> Derrota/empate</span><span>Linha tracejada: média</span></div>`;
   },
 
   /* ---------------- MATCHES (HISTÓRICO) ---------------- */
