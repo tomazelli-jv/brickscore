@@ -1164,6 +1164,8 @@ const State = {
   rankingPeriod: 'geral',
   rankingType: 'pontos',
   rankingView: 'ranking',
+  comparePlayerA: null,
+  comparePlayerB: null,
 };
 
 const Router = {
@@ -1511,9 +1513,15 @@ const UI = {
 
     document.getElementById('ranking-content').classList.toggle('hidden', State.rankingView !== 'ranking');
     document.getElementById('records-content').classList.toggle('hidden', State.rankingView !== 'records');
+    document.getElementById('compare-content').classList.toggle('hidden', State.rankingView !== 'compare');
 
     if (State.rankingView === 'records') {
       UI.renderRecords();
+      return;
+    }
+
+    if (State.rankingView === 'compare') {
+      UI.renderPlayerComparison();
       return;
     }
 
@@ -1608,6 +1616,110 @@ const UI = {
     });
     wrap.querySelectorAll('[data-match]').forEach((row) => {
       row.onclick = () => Router.go('match-detail', { matchDetailId: row.dataset.match });
+    });
+  },
+
+  renderPlayerComparison() {
+    const players = Players.all();
+    const wrap = document.getElementById('compare-content');
+
+    if (players.length < 2) {
+      wrap.innerHTML = '<div class="card"><div class="empty-state">Cadastre pelo menos dois jogadores para fazer uma comparação.</div></div>';
+      return;
+    }
+
+    if (!Players.byId(State.comparePlayerA)) State.comparePlayerA = players[0].id;
+    if (!Players.byId(State.comparePlayerB) || State.comparePlayerB === State.comparePlayerA)
+      State.comparePlayerB = players.find((player) => player.id !== State.comparePlayerA).id;
+
+    const playerA = Players.byId(State.comparePlayerA);
+    const playerB = Players.byId(State.comparePlayerB);
+    const statsA = Stats.forPlayer(playerA.id);
+    const statsB = Stats.forPlayer(playerB.id);
+    const optionList = (selectedId) => players.map((player) =>
+      `<option value="${player.id}" ${player.id === selectedId ? 'selected' : ''}>${Utils.escapeHtml(player.name)}</option>`
+    ).join('');
+
+    const winRateA = statsA.games ? Utils.round1(statsA.wins / statsA.games * 100) : 0;
+    const winRateB = statsB.games ? Utils.round1(statsB.wins / statsB.games * 100) : 0;
+    const avgAssistsA = statsA.games ? Utils.round1(statsA.assists / statsA.games) : 0;
+    const avgAssistsB = statsB.games ? Utils.round1(statsB.assists / statsB.games) : 0;
+
+    const sharedMatches = Matches.all().filter((match) =>
+      (match.teamAIds.includes(playerA.id) || match.teamBIds.includes(playerA.id)) &&
+      (match.teamAIds.includes(playerB.id) || match.teamBIds.includes(playerB.id))
+    );
+    const together = sharedMatches.filter((match) =>
+      (match.teamAIds.includes(playerA.id) && match.teamAIds.includes(playerB.id)) ||
+      (match.teamBIds.includes(playerA.id) && match.teamBIds.includes(playerB.id))
+    );
+    const rivals = sharedMatches.filter((match) => !together.includes(match));
+    let winsA = 0;
+    let winsB = 0;
+    let draws = 0;
+    rivals.forEach((match) => {
+      if (match.winner === 'draw') { draws += 1; return; }
+      const aWon = (match.teamAIds.includes(playerA.id) && match.winner === 'A') ||
+        (match.teamBIds.includes(playerA.id) && match.winner === 'B');
+      if (aWon) winsA += 1; else winsB += 1;
+    });
+
+    const metrics = [
+      ['Jogos', statsA.games, statsB.games, ''],
+      ['Vitórias', statsA.wins, statsB.wins, ''],
+      ['Aproveitamento', winRateA, winRateB, '%'],
+      ['Pontos totais', statsA.points, statsB.points, ''],
+      ['Média de pontos', statsA.avgPoints, statsB.avgPoints, ''],
+      ['Assistências', statsA.assists, statsB.assists, ''],
+      ['Média de assistências', avgAssistsA, avgAssistsB, ''],
+      ['Bolas de 3', statsA.threePoints, statsB.threePoints, ''],
+      ['MVPs', statsA.mvps, statsB.mvps, ''],
+      ['Eficiência', statsA.efficiency, statsB.efficiency, ''],
+      ['Melhor sequência', statsA.bestStreak, statsB.bestStreak, ''],
+    ];
+
+    const metricRows = metrics.map(([label, valueA, valueB, suffix]) => {
+      const aLeads = Number(valueA) > Number(valueB);
+      const bLeads = Number(valueB) > Number(valueA);
+      return `<div class="comparison-row">
+        <strong class="comparison-value ${aLeads ? 'leader' : ''}">${valueA}${suffix}</strong>
+        <span>${label}</span>
+        <strong class="comparison-value ${bLeads ? 'leader' : ''}">${valueB}${suffix}</strong>
+      </div>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <div class="comparison-selectors">
+        <div class="field"><label for="compare-player-a">Jogador 1</label><select id="compare-player-a">${optionList(playerA.id)}</select></div>
+        <div class="comparison-versus">VS</div>
+        <div class="field"><label for="compare-player-b">Jogador 2</label><select id="compare-player-b">${optionList(playerB.id)}</select></div>
+      </div>
+      <div class="comparison-players">
+        <button type="button" data-profile="${playerA.id}"><span class="avatar">${Utils.initials(playerA.name)}</span><strong>${Utils.escapeHtml(playerA.name)}</strong></button>
+        <button type="button" data-profile="${playerB.id}"><span class="avatar">${Utils.initials(playerB.name)}</span><strong>${Utils.escapeHtml(playerB.name)}</strong></button>
+      </div>
+      <div class="card comparison-table">${metricRows}</div>
+      <div class="records-heading">Confronto direto</div>
+      <div class="card head-to-head">
+        <div><strong>${rivals.length}</strong><span>Jogos como rivais</span></div>
+        <div class="head-to-head-score"><strong>${winsA}</strong><span>×</span><strong>${winsB}</strong></div>
+        <p>${draws ? `${draws} empate${draws === 1 ? '' : 's'} · ` : ''}${together.length} partida${together.length === 1 ? '' : 's'} no mesmo time</p>
+      </div>`;
+
+    document.getElementById('compare-player-a').onchange = (event) => {
+      State.comparePlayerA = event.target.value;
+      if (State.comparePlayerA === State.comparePlayerB)
+        State.comparePlayerB = players.find((player) => player.id !== State.comparePlayerA).id;
+      UI.renderPlayerComparison();
+    };
+    document.getElementById('compare-player-b').onchange = (event) => {
+      State.comparePlayerB = event.target.value;
+      if (State.comparePlayerA === State.comparePlayerB)
+        State.comparePlayerA = players.find((player) => player.id !== State.comparePlayerB).id;
+      UI.renderPlayerComparison();
+    };
+    wrap.querySelectorAll('[data-profile]').forEach((button) => {
+      button.onclick = () => Router.go('player-profile', { playerProfileId: button.dataset.profile });
     });
   },
 
