@@ -11,6 +11,19 @@ const DB_KEY = 'brickscore_db_v1';
 const API_BASE = ['127.0.0.1', 'localhost'].includes(location.hostname) && location.port === '5500'
   ? 'https://brickscore.tomaz.host'
   : '';
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  document.getElementById('btn-install-app')?.classList.remove('hidden');
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  document.getElementById('btn-install-app')?.classList.add('hidden');
+  Toast.show('BRICKSCORE instalado!');
+});
 
 const DB = (() => {
 
@@ -1881,6 +1894,14 @@ const CompleteDataTransfer = {
 
 async function initApp() {
 
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch((err) => {
+        console.warn('Service worker não pôde ser registrado.', err);
+      });
+    });
+  }
+
   await DB.load();
 
   const results = await Promise.allSettled([Players.load(), Matches.load()]);
@@ -1896,6 +1917,26 @@ async function initApp() {
   document.getElementById('btn-open-register-2').onclick = () => MatchWizard.openNew();
   document.getElementById('btn-add-player').onclick = () => PlayerForm.open();
   document.getElementById('btn-profile').onclick = () => Router.go('settings');
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true)
+    document.getElementById('btn-install-app').classList.add('hidden');
+  document.getElementById('btn-install-app').onclick = async () => {
+    if (!deferredInstallPrompt) {
+      Modal.open(`
+        <div class="modal-header"><h2>Instalar BRICKSCORE</h2><button class="modal-close" id="install-help-close">×</button></div>
+        <div class="modal-body">
+          <p style="color:var(--text-dim);font-size:14px;line-height:1.6;margin:0;">
+            No menu do navegador, escolha <strong style="color:var(--text);">Instalar aplicativo</strong> ou <strong style="color:var(--text);">Adicionar à tela inicial</strong>.
+            Se a opção ainda não aparecer, atualize a página e aguarde alguns segundos.
+          </p>
+        </div>`);
+      document.getElementById('install-help-close').onclick = Modal.close;
+      return;
+    }
+    await deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    document.getElementById('btn-install-app').classList.add('hidden');
+  };
   document.getElementById('btn-manage-seasons').onclick = () => SeasonManager.open();
   document.getElementById('btn-export').onclick = async () => {
     try {

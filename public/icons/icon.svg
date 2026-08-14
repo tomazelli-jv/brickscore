@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">BRICKSCORE</title>
+  <rect width="512" height="512" rx="112" fill="#0A0A0B"/>
+  <circle cx="256" cy="256" r="172" fill="#FF7A1A"/>
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#160D06" stroke-width="14"/>
+  <path d="M256 90v332M90 256h332M139 139c30 35 71 55 117 55s87-20 117-55M139 373c30-35 71-55 117-55s87 20 117 55" fill="none" stroke="#160D06" stroke-width="14" stroke-linecap="round"/>
+  <path d="M235 177h42l-9 108h-24l-9-108Zm4 133h34v34h-34v-34Z" fill="#FFF7ED"/>
+</svg>
