@@ -1181,6 +1181,178 @@ const State = {
   comparePlayerB: null,
 };
 
+/* =============================================================
+   MODULE: ShareCard (card de resultado em PNG)
+   ============================================================= */
+const ShareCard = {
+  roundedRect(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
+    ctx.closePath();
+  },
+
+  fitText(ctx, text, maxWidth) {
+    const value = String(text || '');
+    if (ctx.measureText(value).width <= maxWidth) return value;
+    let shortened = value;
+    while (shortened.length && ctx.measureText(shortened + '…').width > maxWidth)
+      shortened = shortened.slice(0, -1);
+    return shortened + '…';
+  },
+
+  create(match) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    canvas.height = 1350;
+    const ctx = canvas.getContext('2d');
+    const orange = '#FF7A1A';
+    const text = '#FFF7ED';
+    const dim = '#A6A19A';
+
+    const gradient = ctx.createLinearGradient(0, 0, 1080, 1350);
+    gradient.addColorStop(0, '#1C1310');
+    gradient.addColorStop(.48, '#0A0A0B');
+    gradient.addColorStop(1, '#130D0A');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = 'rgba(255,122,26,.08)';
+    ctx.beginPath(); ctx.arc(960, 150, 330, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(90, 1240, 260, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = orange;
+    ctx.font = '900 30px Arial, sans-serif';
+    ctx.letterSpacing = '4px';
+    ctx.fillText(this.fitText(ctx, (DB.data.leagueName || 'BRICKSCORE').toUpperCase(), 920), 80, 90);
+    ctx.letterSpacing = '0px';
+    ctx.fillStyle = text;
+    ctx.font = '900 70px Arial, sans-serif';
+    ctx.fillText('BRICK', 80, 175);
+    ctx.fillStyle = orange;
+    ctx.fillText('!score', 276, 175);
+
+    ctx.fillStyle = dim;
+    ctx.font = '700 26px Arial, sans-serif';
+    ctx.fillText(`${Utils.formatDateFull(match.date)}  •  ${match.format}`, 80, 232);
+
+    this.roundedRect(ctx, 60, 285, 960, 430, 38);
+    ctx.fillStyle = '#171719';
+    ctx.fill();
+    ctx.strokeStyle = '#343033';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const aWin = match.winner === 'A';
+    const bWin = match.winner === 'B';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = aWin ? orange : text;
+    ctx.font = '800 35px Arial, sans-serif';
+    ctx.fillText(this.fitText(ctx, match.teamA, 350), 285, 400);
+    ctx.fillStyle = bWin ? orange : text;
+    ctx.fillText(this.fitText(ctx, match.teamB, 350), 795, 400);
+
+    ctx.fillStyle = aWin ? orange : text;
+    ctx.font = '900 150px Arial, sans-serif';
+    ctx.fillText(String(match.scoreA), 285, 585);
+    ctx.fillStyle = bWin ? orange : text;
+    ctx.fillText(String(match.scoreB), 795, 585);
+    ctx.fillStyle = dim;
+    ctx.font = '800 34px Arial, sans-serif';
+    ctx.fillText('X', 540, 535);
+
+    const winnerLabel = match.winner === 'draw'
+      ? 'EMPATE'
+      : `${aWin ? match.teamA : match.teamB} VENCEU`;
+    ctx.fillStyle = orange;
+    ctx.font = '900 28px Arial, sans-serif';
+    ctx.fillText(this.fitText(ctx, winnerLabel.toUpperCase(), 780), 540, 665);
+
+    const mvpNames = match.mvpId
+      ? Players.byId(match.mvpId)?.name
+      : (match.mvpTie || []).map((id) => Players.byId(id)?.name).filter(Boolean).join(' / ');
+    this.roundedRect(ctx, 60, 755, 960, 145, 28);
+    ctx.fillStyle = 'rgba(255,122,26,.12)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,122,26,.45)';
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = orange;
+    ctx.font = '900 22px Arial, sans-serif';
+    ctx.fillText(mvpNames ? 'MVP DA PARTIDA' : 'DESTAQUE DA PARTIDA', 95, 808);
+    ctx.fillStyle = text;
+    ctx.font = '900 38px Arial, sans-serif';
+    ctx.fillText(this.fitText(ctx, mvpNames || 'Sem MVP definido', 850), 95, 861);
+
+    const leaders = [...match.teamAIds, ...match.teamBIds]
+      .map((id) => ({ player: Players.byId(id), points: Number(match.stats[id]?.points) || 0 }))
+      .filter((row) => row.player)
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 3);
+    ctx.fillStyle = dim;
+    ctx.font = '800 22px Arial, sans-serif';
+    ctx.fillText('CESTINHAS', 80, 970);
+    leaders.forEach((leader, index) => {
+      const y = 1025 + index * 70;
+      ctx.fillStyle = text;
+      ctx.font = '700 30px Arial, sans-serif';
+      ctx.fillText(`${index + 1}. ${this.fitText(ctx, leader.player.name, 690)}`, 80, y);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = orange;
+      ctx.font = '900 31px Arial, sans-serif';
+      ctx.fillText(`${leader.points} PTS`, 1000, y);
+      ctx.textAlign = 'left';
+    });
+
+    ctx.strokeStyle = '#343033';
+    ctx.beginPath(); ctx.moveTo(80, 1260); ctx.lineTo(1000, 1260); ctx.stroke();
+    ctx.fillStyle = dim;
+    ctx.font = '700 20px Arial, sans-serif';
+    ctx.fillText('GERADO PELO BRICKSCORE', 80, 1305);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = orange;
+    ctx.fillText('BASQUETE • NÚMEROS • RESENHA', 1000, 1305);
+
+    return canvas;
+  },
+
+  async share(match) {
+    const canvas = this.create(match);
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob((result) => result ? resolve(result) : reject(new Error('Falha ao gerar imagem')), 'image/png');
+    });
+    const filename = `brickscore-${Utils.todayISO()}-${match.id}.png`;
+    const file = new File([blob], filename, { type: 'image/png' });
+
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      try {
+        await navigator.share({
+          title: `${match.teamA} ${match.scoreA} x ${match.scoreB} ${match.teamB}`,
+          text: `Resultado registrado no BRICKSCORE`,
+          files: [file],
+        });
+        return 'shared';
+      } catch (err) {
+        if (err.name === 'AbortError') return 'cancelled';
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    return 'downloaded';
+  },
+};
+
 const Router = {
   go(view, params = {}) {
     Object.assign(State, params);
@@ -1492,12 +1664,28 @@ const UI = {
       <div class="section-sub">${Utils.escapeHtml(m.teamB)}</div>
       <div class="card">${tableFor(m.teamBIds)}</div>
 
+      <button class="btn-primary" id="md-share" style="width:100%;margin-top:20px;">Compartilhar resultado</button>
       <div class="field-row" style="margin-top:20px;">
         <button class="btn-secondary" id="md-edit" style="flex:1;">Editar</button>
         <button class="btn-secondary" id="md-duplicate" style="flex:1;">Duplicar</button>
       </div>
       <button class="btn-danger" id="md-delete" style="width:100%;margin-top:10px;">Excluir partida</button>
     `;
+    document.getElementById('md-share').onclick = async () => {
+      const button = document.getElementById('md-share');
+      button.disabled = true;
+      button.textContent = 'Gerando card...';
+      try {
+        const result = await ShareCard.share(m);
+        if (result === 'downloaded') Toast.show('Card salvo como imagem');
+      } catch (err) {
+        console.error(err);
+        Toast.show('Não foi possível gerar o card');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Compartilhar resultado';
+      }
+    };
     document.getElementById('md-edit').onclick = () => MatchWizard.open(m.id);
     document.getElementById('md-duplicate').onclick = () => {
       const copy = Matches.duplicate(m.id);
