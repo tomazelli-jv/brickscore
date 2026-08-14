@@ -711,7 +711,35 @@ if (delBtn) {
 const MatchWizard = {
   state: null,
 
-  open(editingId) {
+  openNew() {
+    const lastMatch = Matches.all()[0];
+
+    if (!lastMatch) {
+      this.open();
+      return;
+    }
+
+    Modal.open(`
+      <div class="modal-header">
+        <h2>Nova partida</h2>
+        <button class="modal-close" id="mw-reuse-close">âœ•</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text);font-size:15px;font-weight:800;line-height:1.5;margin:0;">
+          DESEJA MANTER OS JOGADORES DA &Uacute;LTIMA PARTIDA?
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="mw-reuse-no">N&atilde;o</button>
+        <button class="btn-primary" id="mw-reuse-yes" style="flex:1;">Sim</button>
+      </div>`);
+
+    document.getElementById('mw-reuse-close').onclick = Modal.close;
+    document.getElementById('mw-reuse-no').onclick = () => this.open();
+    document.getElementById('mw-reuse-yes').onclick = () => this.open(null, lastMatch);
+  },
+
+  open(editingId, previousMatch) {
     const editing = editingId ? Matches.byId(editingId) : null;
     if (editing) {
       this.state = {
@@ -724,6 +752,23 @@ const MatchWizard = {
         teamAIds: editing.teamAIds.slice(),
         teamBIds: editing.teamBIds.slice(),
         statsMap: JSON.parse(JSON.stringify(editing.stats)),
+        search: '',
+      };
+    } else if (previousMatch) {
+      const availableIds = new Set(Players.all().map((player) => player.id));
+      const teamAIds = previousMatch.teamAIds.filter((id) => availableIds.has(id));
+      const teamBIds = previousMatch.teamBIds.filter((id) => availableIds.has(id));
+
+      this.state = {
+        editingId: null,
+        step: 0,
+        teamAName: previousMatch.teamA,
+        teamBName: previousMatch.teamB,
+        format: previousMatch.format,
+        selected: new Set([...teamAIds, ...teamBIds]),
+        teamAIds,
+        teamBIds,
+        statsMap: {},
         search: '',
       };
     } else {
@@ -1542,8 +1587,8 @@ async function initApp() {
     el.addEventListener('click', () => Router.go(el.dataset.nav));
   });
 
-  document.getElementById('btn-open-register').onclick = () => MatchWizard.open();
-  document.getElementById('btn-open-register-2').onclick = () => MatchWizard.open();
+  document.getElementById('btn-open-register').onclick = () => MatchWizard.openNew();
+  document.getElementById('btn-open-register-2').onclick = () => MatchWizard.openNew();
   document.getElementById('btn-add-player').onclick = () => PlayerForm.open();
   document.getElementById('btn-profile').onclick = () => Router.go('settings');
   document.getElementById('btn-manage-seasons').onclick = () => SeasonManager.open();
